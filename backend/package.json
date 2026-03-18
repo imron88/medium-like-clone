@@ -4,7 +4,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "wrangler d1 migrations apply medium --local"
+    "db:migrate": "wrangler d1 migrations apply medium --local",
+    "db:migrate:remote": "wrangler d1 migrations apply medium --remote"
   },
   "dependencies": {
     "@ronak3333/medium-common": "^1.0.0",
