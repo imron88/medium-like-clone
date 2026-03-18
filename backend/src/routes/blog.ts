@@ -1,13 +1,15 @@
 import { Hono } from "hono";
-import { sign, verify } from 'hono/jwt'
-import { PrismaClient } from '@prisma/client/edge'
-import { withAccelerate } from '@prisma/extension-accelerate'
+import { sign, verify } from 'hono/jwt';
+import { drizzle } from 'drizzle-orm/d1';
+import { eq } from 'drizzle-orm';
+import { posts } from '../db/schema';
+import * as schema from '../db/schema';
 import { createBlogInput,updateBlogInput } from "@ronak3333/medium-common";
 
 
 export const blogRouter = new Hono<{
     Bindings: {
-      DATABASE_URL : string
+      medium : D1Database
       JWT_SECRET : string
     },
     Variables:{
@@ -43,9 +45,7 @@ blogRouter.use("/*", async (c, next) => {
 
 // blog routes post
 blogRouter.post("/", async (c) => {
-    const prisma = new PrismaClient({
-        datasourceUrl: c.env.DATABASE_URL,
-    }).$extends(withAccelerate());
+    const db = drizzle(c.env.medium);
 
     const body = await c.req.json();
     const { success } = createBlogInput.safeParse(body);
@@ -64,16 +64,15 @@ blogRouter.post("/", async (c) => {
     }
 
     try {
-        const blog = await prisma.post.create({
-            data: {
-                title: body.title,
-                content: body.content,
-                authorId: authorId,
-            },
-        });
+        const result = await db.insert(posts).values({
+            id: crypto.randomUUID(),
+            title: body.title,
+            content: body.content,
+            authorId: authorId,
+        }).returning({ id: posts.id });
 
         return c.json({
-            id : blog.id
+            id : result[0].id
         });
     } catch (error) {
         console.error("Error creating blog:", error);
@@ -86,9 +85,7 @@ blogRouter.post("/", async (c) => {
 
 // blog routes put
 blogRouter.put("/",async(c)=>{
-    const prisma = new PrismaClient({
-        datasourceUrl : c.env.DATABASE_URL,
-    }).$extends(withAccelerate())
+    const db = drizzle(c.env.medium);
     
     const body = await c.req.json()
     const {success} = updateBlogInput.safeParse(body)
@@ -98,67 +95,64 @@ blogRouter.put("/",async(c)=>{
     }
     const authorId = c.get("userId")
     
-    const blog = await prisma.post.update({
-        where : {
-            id : body.id
-        },
-        data : {
-            title : body.title,
-            content : body.content,
-            authorId : authorId
-        }
-    })
+    const result = await db.update(posts).set({
+        title : body.title,
+        content : body.content,
+        authorId : authorId
+    }).where(eq(posts.id, body.id)).returning({ id: posts.id });
     
-    return c.json({id : blog.id})
+    if (result.length === 0) {
+        c.status(404);
+        return c.json({ error: "Blog not found" });
+    }
+    return c.json({id : result[0].id})
 })
 
 // todo : to add pagination
 blogRouter.get("/bulk",async(c)=>{
-    const prisma = new PrismaClient({
-        datasourceUrl : c.env.DATABASE_URL,
-    }).$extends(withAccelerate())
+    const db = drizzle(c.env.medium, { schema });
     
-    const blogs = await prisma.post.findMany({
-        select:{
+    const allBlogs = await db.query.posts.findMany({
+        columns:{
             content : true,
             title : true,
             id : true,
+        },
+        with: {
             author : {
-                select : {
+                columns : {
                     name : true
-                    }
-            },
+                }
+            }
         }
-    })
+    });
     
-    return c.json<{ blogs: typeof blogs }>({ blogs })
+    return c.json<{ blogs: typeof allBlogs }>({ blogs: allBlogs })
 })
 
 
 
 // blog routes get
 blogRouter.get("/:id",async(c)=>{
-    const prisma = new PrismaClient({
-        datasourceUrl : c.env.DATABASE_URL,
-    }).$extends(withAccelerate())
+    const db = drizzle(c.env.medium, { schema });
 
     const id = c.req.param("id")
     try {
-        const blog = await prisma.post.findFirst({
-            where : {
-                id : id
-            },
-            select:{
+        const blog = await db.query.posts.findFirst({
+            where: eq(posts.id, id),
+            columns:{
                 content : true,
                 title : true,
                 id : true,
+            },
+            with: {
                 author : {
-                    select : {
+                    columns : {
                         name : true
                     }
                 }
             }
-        })
+        });
         
         return c.json({blog})
     }catch(e){
