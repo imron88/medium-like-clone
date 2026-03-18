@@ -64,15 +64,16 @@ blogRouter.post("/", async (c) => {
     }
 
     try {
-        const result = await db.insert(posts).values({
-            id: crypto.randomUUID(),
+        const newId = crypto.randomUUID();
+        await db.insert(posts).values({
+            id: newId,
             title: body.title,
             content: body.content,
             authorId: authorId,
-        }).returning({ id: posts.id });
+        });
 
         return c.json({
-            id : result[0].id
+            id : newId
         });
     } catch (error) {
         console.error("Error creating blog:", error);
@@ -95,17 +96,13 @@ blogRouter.put("/",async(c)=>{
     }
     const authorId = c.get("userId")
     
-    const result = await db.update(posts).set({
+    await db.update(posts).set({
         title : body.title,
         content : body.content,
         authorId : authorId
-    }).where(eq(posts.id, body.id)).returning({ id: posts.id });
+    }).where(eq(posts.id, body.id));
     
-    if (result.length === 0) {
-        c.status(404);
-        return c.json({ error: "Blog not found" });
-    }
-    return c.json({id : result[0].id})
+    return c.json({id : body.id})
 })
 
 // todo : to add pagination

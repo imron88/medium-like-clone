@@ -24,16 +24,15 @@ userRouter.post("/signup", async (c) => {
     return c.json({ error: "Invalid input" })
   }
   try {
-    const result = await db.insert(users).values({
-      id: crypto.randomUUID(),
+    const newId = crypto.randomUUID();
+    await db.insert(users).values({
+      id: newId,
       email: body.email,
       password: body.password,
       name: body.name
-    }).returning({ id: users.id });
+    });
 
-    const user = result[0];
-
-    const jwt = await sign({ id: user.id }, c.env.JWT_SECRET)
+    const jwt = await sign({ id: newId }, c.env.JWT_SECRET)
 
     return c.json(jwt)
 
